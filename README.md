@@ -5,29 +5,15 @@ Rozszerzalny desktop w Pythonie/PyQt6. To aplikacja uruchamiana na Linuksie lub 
 ## Windows: launcher ze przyciskiem START
 
 1. Zainstaluj Python 3.10+ z https://www.python.org/downloads/ i zaznacz **Add python.exe to PATH**.
-2. Utwórz środowisko i zainstaluj zależności:
+2. Dwukrotnie kliknij `launcher.bat`.
+3. Kliknij **START**. Launcher sam utworzy `.venv`, doinstaluje pakiety z `requirements.txt` i uruchomi pulpit. Pierwsze uruchomienie może potrwać.
 
-```bat
-py -3 -m venv .venv
-.venv\Scripts\python.exe -m pip install -r requirements.txt
-```
+Jeśli wystąpi błąd, launcher pokaże komunikat. Szczegóły zapisuje do `veltrix-launcher.log` w katalogu projektu. Zachowuje okno launchera, żeby można było ponowić próbę.
 
-3. Dwukrotnie kliknij `launcher.bat` lub uruchom:
+Możesz również uruchomić z CMD:
 
 ```bat
 py launcher.py
-```
-
-Pojawi się małe okno ze przyciskiem **START**. Po jego naciśnięciu uruchomi się VELTRIX OS.
-
-Możesz też użyć `run.bat`, uruchamiając projekt bez okna launchera.
-
-## Komenda CMD
-
-Po uruchomieniu `install-command.bat` zamknij i otwórz ponownie CMD, a następnie wpisz:
-
-```bat
-veltrix
 ```
 
 ## Linux
