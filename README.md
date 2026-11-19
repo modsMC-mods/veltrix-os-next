@@ -19,6 +19,6 @@ py launcher.py
 ## Linux
 
 ```bash
-chmod +x run.sh
+chmod+x run.sh
 ./run.sh
 ```

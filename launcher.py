@@ -1,5 +1,4 @@
 """Small Windows-friendly launcher that installs dependencies and reports errors."""
-import os
 import subprocess
 import sys
 import threading
