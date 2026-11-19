@@ -1,4 +1,7 @@
-"""VELTRIX desktop shell: file manager, terminal, settings, and gaming launch point."""
+"""VELTRIX Desktop: a polished user-space desktop shell for Windows and Linux.
+
+This is an application running on the host OS, not a replacement for Windows/Linux.
+"""
 import os
 import platform
 import subprocess
@@ -7,423 +10,545 @@ import traceback
 from datetime import datetime
 from pathlib import Path
 
-from PyQt6.QtCore import QDir, QProcess, QTimer, Qt, QUrl
-from PyQt6.QtGui import QDesktopServices, QKeySequence, QShortcut
+from PyQt6.QtCore import QDir, QProcess, QTimer, Qt, QUrl, pyqtSignal
+from PyQt6.QtGui import QAction, QColor, QDesktopServices, QKeySequence, QLinearGradient, QPainter, QShortcut
 from PyQt6.QtWidgets import (
-    QApplication, QCheckBox, QFrame, QGridLayout, QHBoxLayout, QInputDialog,
-    QLabel, QLineEdit, QMainWindow, QMessageBox, QPlainTextEdit, QPushButton,
-    QStackedWidget, QTreeView, QVBoxLayout, QWidget,
+    QApplication, QCheckBox, QFileDialog, QFrame, QGridLayout, QHBoxLayout,
+    QHeaderView, QInputDialog, QLabel, QLineEdit, QMainWindow, QMenu,
+    QMessageBox, QPlainTextEdit, QPushButton, QTableWidget, QTableWidgetItem,
+    QVBoxLayout, QWidget,
 )
-
-# QFileSystemModel belongs to QtWidgets in PyQt6 builds. Import QtGui as a
-# compatibility fallback for differently packaged PyQt6 installations.
-try:
-    from PyQt6.QtWidgets import QFileSystemModel
-except ImportError:
-    from PyQt6.QtGui import QFileSystemModel
 
 try:
     import psutil
 except ImportError:
     psutil = None
 
+ROOT = Path(__file__).resolve().parents[2]
 HOME = Path.home()
 ACCENT = "#a6ff00"
 DARK_STYLE = """
-QMainWindow, QWidget { background:#101319; color:#f0f3f6; font-family:'Segoe UI',sans-serif; }
-QFrame#sidebar { background:#171b22; border-right:1px solid #2a3039; }
-QFrame#card { background:#1b2029; border:1px solid #303743; border-radius:12px; }
-QLabel#brand { font-size:22px; font-weight:900; }
-QLabel#heading { font-size:28px; font-weight:700; }
-QLabel#muted { color:#a0a9b5; }
-QPushButton { background:#222833; color:#f0f3f6; border:1px solid #343c49; border-radius:8px; padding:9px 13px; }
-QPushButton:hover { border-color:#a6ff00; color:#a6ff00; }
+QMainWindow, QWidget { background:#10141c; color:#f4f6fb; font-family:'Segoe UI',sans-serif; }
+QFrame#taskbar, QFrame#glass, QFrame#panel { background:#171d29; border:1px solid #30394a; border-radius:14px; }
+QLabel#muted { color:#aab4c5; }
+QLabel#heading { font-size:25px; font-weight:700; }
+QPushButton { background:#222a38; color:#f4f6fb; border:1px solid #394457; border-radius:9px; padding:9px 13px; }
+QPushButton:hover { background:#303b4e; border-color:#a6ff00; }
 QPushButton#primary { background:#a6ff00; color:#11150b; border:0; font-weight:800; }
-QPushButton#nav { background:transparent; border:0; padding:12px; color:#c2c8d0; text-align:left; }
-QLineEdit, QTreeView, QPlainTextEdit { background:#171b22; color:#f0f3f6; border:1px solid #343c49; border-radius:7px; padding:8px; }
+QPushButton#primary:hover { background:#c2ff59; }
+QPushButton#desktopIcon { background:transparent; border:1px solid transparent; padding:10px; text-align:center; }
+QPushButton#desktopIcon:hover { background:rgba(255,255,255,35); border-color:rgba(255,255,255,65); }
+QLineEdit, QTableWidget, QPlainTextEdit { background:#121720; color:#f4f6fb; border:1px solid #394457; border-radius:8px; padding:8px; selection-background-color:#47651a; }
+QTableWidget { gridline-color:#283140; }
+QHeaderView::section { background:#1b2330; color:#b8c2d2; border:0; padding:8px; }
+QMenu { background:#171d29; color:#f4f6fb; border:1px solid #394457; padding:8px; }
+QMenu::item { padding:9px 24px; border-radius:6px; }
+QMenu::item:selected { background:#303b4e; color:#a6ff00; }
+QCheckBox { spacing:9px; }
 """
 LIGHT_STYLE = """
-QMainWindow, QWidget { background:#f3f5f7; color:#20242a; font-family:'Segoe UI',sans-serif; }
-QFrame#sidebar { background:#e6e9ed; border-right:1px solid #cbd1d8; }
-QFrame#card { background:white; border:1px solid #d8dde3; border-radius:12px; }
-QLabel#brand { font-size:22px; font-weight:900; }
-QLabel#heading { font-size:28px; font-weight:700; }
-QLabel#muted { color:#606b78; }
-QPushButton { background:white; color:#20242a; border:1px solid #cbd1d8; border-radius:8px; padding:9px 13px; }
-QPushButton:hover { border-color:#6b8e23; color:#496719; }
-QPushButton#primary { background:#7cad26; color:white; border:0; font-weight:800; }
-QPushButton#nav { background:transparent; border:0; padding:12px; color:#404954; text-align:left; }
-QLineEdit, QTreeView, QPlainTextEdit { background:white; color:#20242a; border:1px solid #cbd1d8; border-radius:7px; padding:8px; }
+QMainWindow, QWidget { background:#f0f3f8; color:#202938; font-family:'Segoe UI',sans-serif; }
+QFrame#taskbar, QFrame#glass, QFrame#panel { background:#f8faff; border:1px solid #d5dce7; border-radius:14px; }
+QLabel#muted { color:#647187; }
+QLabel#heading { font-size:25px; font-weight:700; }
+QPushButton { background:#e9eef6; color:#202938; border:1px solid #d0d8e5; border-radius:9px; padding:9px 13px; }
+QPushButton:hover { background:#dfe8f5; border-color:#709326; }
+QPushButton#primary { background:#7cac20; color:white; border:0; font-weight:800; }
+QPushButton#desktopIcon { background:transparent; border:1px solid transparent; padding:10px; text-align:center; }
+QPushButton#desktopIcon:hover { background:rgba(30,50,80,25); border-color:rgba(30,50,80,55); }
+QLineEdit, QTableWidget, QPlainTextEdit { background:white; color:#202938; border:1px solid #d0d8e5; border-radius:8px; padding:8px; selection-background-color:#cfe2ad; }
+QTableWidget { gridline-color:#e1e6ee; }
+QHeaderView::section { background:#e7edf5; color:#435066; border:0; padding:8px; }
+QMenu { background:#f8faff; color:#202938; border:1px solid #d0d8e5; padding:8px; }
+QMenu::item { padding:9px 24px; border-radius:6px; }
+QMenu::item:selected { background:#e3ebd7; color:#496719; }
 """
 
 
-class SystemCard(QFrame):
-    def __init__(self, title, value, detail):
-        super().__init__()
-        self.setObjectName("card")
-        box = QVBoxLayout(self)
-        box.setContentsMargins(17, 15, 17, 15)
-        title_label = QLabel(title.upper())
-        title_label.setObjectName("muted")
-        self.value = QLabel(value)
-        self.value.setStyleSheet("font-size:23px;font-weight:700;")
-        self.detail = QLabel(detail)
-        self.detail.setObjectName("muted")
-        box.addWidget(title_label)
-        box.addWidget(self.value)
-        box.addWidget(self.detail)
+class Wallpaper(QWidget):
+    """Paint a vivid, lightweight abstract wallpaper without external assets."""
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        gradient = QLinearGradient(0, 0, self.width(), self.height())
+        gradient.setColorAt(0, QColor("#142a3e"))
+        gradient.setColorAt(.48, QColor("#273752"))
+        gradient.setColorAt(1, QColor("#472b4b"))
+        painter.fillRect(self.rect(), gradient)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(48, 187, 176, 75))
+        painter.drawEllipse(int(self.width() * .56), -180, 680, 680)
+        painter.setBrush(QColor(172, 255, 0, 25))
+        painter.drawEllipse(int(self.width() * .67), int(self.height() * .43), 520, 520)
+        painter.setBrush(QColor(255, 118, 166, 35))
+        painter.drawEllipse(-230, int(self.height() * .53), 520, 520)
+        painter.end()
 
 
-class TerminalPage(QWidget):
-    def __init__(self):
-        super().__init__()
+class FileExplorer(QMainWindow):
+    def __init__(self, parent=None):
+        super().__init__(parent, Qt.WindowType.Window)
+        self.setWindowTitle("VELTRIX Explorer")
+        self.resize(900, 590)
+        self.current_path = HOME
+        central = QWidget()
+        layout = QVBoxLayout(central)
+        layout.setContentsMargins(18, 16, 18, 18)
+        layout.setSpacing(12)
+
+        title_row = QHBoxLayout()
+        title = QLabel("Explorer")
+        title.setObjectName("heading")
+        title_row.addWidget(title)
+        title_row.addStretch()
+        title_row.addWidget(QLabel("Twoje pliki • lokalnie"))
+        layout.addLayout(title_row)
+
+        toolbar = QHBoxLayout()
+        for caption, callback in (("←", self.go_up), ("⌂ Home", self.go_home), ("Odśwież", self.refresh)):
+            button = QPushButton(caption)
+            button.clicked.connect(callback)
+            toolbar.addWidget(button)
+        self.path = QLineEdit(str(HOME))
+        self.path.returnPressed.connect(lambda: self.navigate(self.path.text()))
+        toolbar.addWidget(self.path, 1)
+        go = QPushButton("Idź")
+        go.clicked.connect(lambda: self.navigate(self.path.text()))
+        toolbar.addWidget(go)
+        self.search = QLineEdit()
+        self.search.setPlaceholderText("Szukaj w tym folderze…")
+        self.search.textChanged.connect(self.filter_rows)
+        toolbar.addWidget(self.search)
+        layout.addLayout(toolbar)
+
+        actions = QHBoxLayout()
+        for caption, callback in (("＋ Nowy folder", self.new_folder), ("Otwórz", self.open_selected)):
+            button = QPushButton(caption)
+            button.clicked.connect(callback)
+            actions.addWidget(button)
+        actions.addStretch()
+        self.status = QLabel("")
+        self.status.setObjectName("muted")
+        actions.addWidget(self.status)
+        layout.addLayout(actions)
+
+        self.table = QTableWidget(0, 4)
+        self.table.setHorizontalHeaderLabels(["Nazwa", "Typ", "Rozmiar", "Zmodyfikowano"])
+        self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.table.setAlternatingRowColors(True)
+        self.table.verticalHeader().setVisible(False)
+        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        for col in (1, 2, 3):
+            self.table.horizontalHeader().setSectionResizeMode(col, QHeaderView.ResizeMode.ResizeToContents)
+        self.table.cellDoubleClicked.connect(self.open_row)
+        layout.addWidget(self.table, 1)
+        self.setCentralWidget(central)
+        self.navigate(str(HOME))
+        QShortcut(QKeySequence("Alt+Up"), self, activated=self.go_up)
+        QShortcut(QKeySequence("Ctrl+L"), self, activated=self.focus_path)
+        QShortcut(QKeySequence("F5"), self, activated=self.refresh)
+
+    def navigate(self, value):
+        path = Path(value).expanduser()
+        try:
+            if not path.is_dir():
+                raise NotADirectoryError(str(path))
+            self.current_path = path.resolve()
+            self.path.setText(str(self.current_path))
+            self.search.clear()
+            self.table.setRowCount(0)
+            entries = sorted(self.current_path.iterdir(), key=lambda p: (not p.is_dir(), p.name.casefold()))
+            for entry in entries:
+                try:
+                    stat = entry.stat()
+                    kind = "Folder" if entry.is_dir() else (entry.suffix[1:].upper() or "Plik")
+                    size = "—" if entry.is_dir() else self.format_size(stat.st_size)
+                    modified = datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M")
+                except OSError:
+                    kind, size, modified = "Niedostępny", "—", "—"
+                row = self.table.rowCount()
+                self.table.insertRow(row)
+                name_item = QTableWidgetItem(("📁  " if entry.is_dir() else "📄  ") + entry.name)
+                name_item.setData(Qt.ItemDataRole.UserRole, str(entry))
+                self.table.setItem(row, 0, name_item)
+                for col, value in enumerate((kind, size, modified), 1):
+                    self.table.setItem(row, col, QTableWidgetItem(value))
+            self.status.setText(f"{len(entries)} elementów")
+        except (OSError, PermissionError) as error:
+            QMessageBox.warning(self, "Nie można otworzyć folderu", f"{path}\n\n{error}")
+
+    @staticmethod
+    def format_size(size):
+        for unit in ("B", "KB", "MB", "GB", "TB"):
+            if size < 1024 or unit == "TB":
+                return f"{size:.0f} {unit}" if unit == "B" else f"{size:.1f} {unit}"
+            size /= 1024
+
+    def filter_rows(self, text):
+        query = text.casefold()
+        for row in range(self.table.rowCount()):
+            item = self.table.item(row, 0)
+            self.table.setRowHidden(row, bool(query) and query not in item.text().casefold())
+
+    def go_home(self):
+        self.navigate(str(HOME))
+
+    def go_up(self):
+        if self.current_path.parent != self.current_path:
+            self.navigate(str(self.current_path.parent))
+
+    def refresh(self):
+        self.navigate(str(self.current_path))
+
+    def focus_path(self):
+        self.path.setFocus()
+        self.path.selectAll()
+
+    def selected_path(self):
+        row = self.table.currentRow()
+        item = self.table.item(row, 0) if row >= 0 else None
+        return Path(item.data(Qt.ItemDataRole.UserRole)) if item else None
+
+    def open_selected(self):
+        path = self.selected_path()
+        if path:
+            self.open_path(path)
+
+    def open_row(self, row, column):
+        item = self.table.item(row, 0)
+        if item:
+            self.open_path(Path(item.data(Qt.ItemDataRole.UserRole)))
+
+    def open_path(self, path):
+        if path.is_dir():
+            self.navigate(str(path))
+        else:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
+
+    def new_folder(self):
+        name, ok = QInputDialog.getText(self, "Nowy folder", "Nazwa folderu:")
+        if not ok or not name.strip():
+            return
+        try:
+            (self.current_path / name.strip()).mkdir()
+            self.refresh()
+        except OSError as error:
+            QMessageBox.critical(self, "Nie można utworzyć folderu", str(error))
+
+
+class TerminalWindow(QMainWindow):
+    def __init__(self, parent=None):
+        super().__init__(parent, Qt.WindowType.Window)
+        self.setWindowTitle("VELTRIX Terminal")
+        self.resize(800, 500)
         self.cwd = HOME
         self.process = None
-        self.console = QPlainTextEdit()
-        self.console.setReadOnly(True)
-        self.console.setStyleSheet("font-family:Consolas,monospace;font-size:13px;padding:12px;")
-        self.console.appendPlainText("VELTRIX Terminal — polecenia działają z uprawnieniami bieżącego użytkownika.")
-        self.console.appendPlainText(f"Katalog: {self.cwd}")
-        self.command = QLineEdit()
-        self.command.setPlaceholderText("Wpisz polecenie i naciśnij Enter…")
-        self.command.returnPressed.connect(self.run_command)
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(26, 22, 26, 22)
-        layout.addWidget(self.console, 1)
-        layout.addWidget(self.command)
+        center = QWidget()
+        layout = QVBoxLayout(center)
+        layout.setContentsMargins(16, 16, 16, 16)
+        self.output = QPlainTextEdit()
+        self.output.setReadOnly(True)
+        self.output.setStyleSheet("font-family:Consolas,monospace;font-size:13px;")
+        self.output.appendPlainText("VELTRIX Terminal • działa jako bieżący użytkownik")
+        self.output.appendPlainText(str(self.cwd))
+        self.input = QLineEdit()
+        self.input.setPlaceholderText("Polecenie… (Enter uruchamia)")
+        self.input.returnPressed.connect(self.run_command)
+        layout.addWidget(self.output, 1)
+        layout.addWidget(self.input)
+        self.setCentralWidget(center)
 
     def run_command(self):
-        text = self.command.text().strip()
-        if not text or self.process is not None:
+        command = self.input.text().strip()
+        if not command or self.process:
             return
-        self.command.clear()
-        self.console.appendPlainText(f"\n{self.cwd} > {text}")
-        if text.lower() in ("clear", "cls"):
-            self.console.clear()
+        self.input.clear()
+        self.output.appendPlainText(f"\n{self.cwd} > {command}")
+        if command.casefold() in ("clear", "cls"):
+            self.output.clear()
             return
-        if text.lower() in ("exit", "quit"):
-            self.console.appendPlainText("Terminal nadal działa. Wpisz polecenie lub zamknij VELTRIX.")
-            return
-        if text.lower() == "cd" or text.lower().startswith("cd "):
-            target = text[2:].strip().strip('"') or str(HOME)
+        if command.casefold() == "cd" or command.casefold().startswith("cd "):
+            target = command[2:].strip().strip('"') or str(HOME)
             path = Path(target).expanduser()
             if not path.is_absolute():
                 path = self.cwd / path
             if path.is_dir():
                 self.cwd = path.resolve()
-                self.console.appendPlainText(str(self.cwd))
+                self.output.appendPlainText(str(self.cwd))
             else:
-                self.console.appendPlainText(f"Folder nie istnieje: {path}")
+                self.output.appendPlainText(f"Folder nie istnieje: {path}")
             return
-
         process = QProcess(self)
         process.setWorkingDirectory(str(self.cwd))
         process.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
         if os.name == "nt":
             process.setProgram(os.environ.get("COMSPEC", "cmd.exe"))
-            process.setArguments(["/d", "/s", "/c", text])
+            process.setArguments(["/d", "/s", "/c", command])
         else:
             process.setProgram(os.environ.get("SHELL", "/bin/bash"))
-            process.setArguments(["-lc", text])
-        process.readyReadStandardOutput.connect(lambda p=process: self._read_output(p))
-        process.finished.connect(lambda code, status, p=process: self._finished(p, code))
+            process.setArguments(["-lc", command])
+        process.readyReadStandardOutput.connect(lambda p=process: self.read_output(p))
+        process.finished.connect(lambda code, status, p=process: self.finished(p, code))
         self.process = process
-        self.command.setEnabled(False)
+        self.input.setEnabled(False)
         process.start()
 
-    def _read_output(self, process):
-        data = bytes(process.readAllStandardOutput()).decode(errors="replace")
-        if data:
-            self.console.moveCursor(self.console.textCursor().MoveOperation.End)
-            self.console.insertPlainText(data)
-            self.console.ensureCursorVisible()
+    def read_output(self, process):
+        text = bytes(process.readAllStandardOutput()).decode(errors="replace")
+        if text:
+            self.output.moveCursor(self.output.textCursor().MoveOperation.End)
+            self.output.insertPlainText(text)
+            self.output.ensureCursorVisible()
 
-    def _finished(self, process, code):
-        self._read_output(process)
-        self.console.appendPlainText(f"[zakończono: {code}]")
+    def finished(self, process, code):
+        self.read_output(process)
+        self.output.appendPlainText(f"[zakończono: {code}]")
         self.process = None
-        self.command.setEnabled(True)
-        self.command.setFocus()
+        self.input.setEnabled(True)
+        self.input.setFocus()
+        process.deleteLater()
 
 
 class VeltrixDesktop(QMainWindow):
-    PAGES = ["Pulpit", "Pliki", "Terminal", "Gaming", "Ustawienia"]
-
     def __init__(self):
         super().__init__()
         self.setWindowTitle("VELTRIX Desktop")
-        self.resize(1360, 850)
+        self.resize(1440, 900)
         self.setMinimumSize(980, 650)
         self.setStyleSheet(DARK_STYLE)
-        self.stack = QStackedWidget()
-        self.nav_buttons = []
-        self._build_shell()
-        self.stack.addWidget(self._home_page())
-        self.stack.addWidget(self._files_page())
-        self.terminal = TerminalPage()
-        self.stack.addWidget(self.terminal)
-        self.stack.addWidget(self._gaming_page())
-        self.stack.addWidget(self._settings_page())
-        self._select_page(0)
+        self.children = []
+        self.light_theme = False
+        self.canvas = Wallpaper()
+        self._build_desktop()
         self.clock = QTimer(self)
-        self.clock.timeout.connect(self._update_clock)
+        self.clock.timeout.connect(self.update_clock)
         self.clock.start(1000)
+        self.update_clock()
         self.metrics = QTimer(self)
-        self.metrics.timeout.connect(self._refresh_metrics)
-        self.metrics.start(2000)
-        self._refresh_metrics()
-        QShortcut(QKeySequence("Ctrl+L"), self, activated=self._focus_path)
-        QShortcut(QKeySequence("Ctrl+R"), self, activated=self._refresh_files)
+        self.metrics.timeout.connect(self.update_status)
+        self.metrics.start(2500)
+        self.update_status()
+        QShortcut(QKeySequence("Meta+E"), self, activated=self.open_explorer)
+        QShortcut(QKeySequence("Ctrl+Alt+T"), self, activated=self.open_terminal)
 
-    def _build_shell(self):
-        central = QWidget()
-        main = QVBoxLayout(central)
-        main.setContentsMargins(0, 0, 0, 0)
-        main.setSpacing(0)
-        body = QHBoxLayout()
-        body.setSpacing(0)
+    def _build_desktop(self):
+        root = QWidget()
+        layout = QVBoxLayout(root)
+        layout.setContentsMargins(0, 0, 0, 12)
+        layout.setSpacing(0)
+        self.canvas.setMinimumHeight(500)
+        canvas_layout = QVBoxLayout(self.canvas)
+        canvas_layout.setContentsMargins(24, 20, 24, 22)
+        canvas_layout.setSpacing(12)
 
-        self.sidebar = QFrame(objectName="sidebar")
-        self.sidebar.setFixedWidth(220)
-        side = QVBoxLayout(self.sidebar)
-        side.setContentsMargins(15, 20, 15, 14)
-        brand = QLabel("V<span style='color:#a6ff00'>/</span>ELTRIX")
-        brand.setTextFormat(Qt.TextFormat.RichText)
-        brand.setObjectName("brand")
-        side.addWidget(brand)
-        side.addWidget(QLabel("DESKTOP • PLAY • CREATE", objectName="muted"))
-        side.addSpacing(24)
-        icons = ["⌂", "▤", ">_", "🎮", "⚙"]
-        for i, name in enumerate(self.PAGES):
-            button = QPushButton(f"{icons[i]}   {name}")
-            button.setObjectName("nav")
-            button.clicked.connect(lambda checked=False, index=i: self._select_page(index))
-            side.addWidget(button)
-            self.nav_buttons.append(button)
-        side.addStretch()
-        side.addWidget(QLabel("LOCAL USER SESSION", objectName="muted"))
-        body.addWidget(self.sidebar)
-        body.addWidget(self.stack, 1)
-        main.addLayout(body, 1)
+        header = QHBoxLayout()
+        brand = QLabel("V/ELTRIX")
+        brand.setStyleSheet("font-size:20px;font-weight:900;color:white;letter-spacing:1px;")
+        header.addWidget(brand)
+        header.addStretch()
+        self.host_label = QLabel(platform.system() + "  •  VELTRIX USER DESKTOP")
+        self.host_label.setStyleSheet("color:rgba(255,255,255,205);font-size:11px;font-weight:700;")
+        header.addWidget(self.host_label)
+        canvas_layout.addLayout(header)
 
-        taskbar = QFrame(objectName="sidebar")
-        taskbar.setFixedHeight(48)
-        taskrow = QHBoxLayout(taskbar)
-        taskrow.setContentsMargins(16, 3, 18, 3)
-        menu = QPushButton("◉  VELTRIX")
-        menu.clicked.connect(lambda: self._select_page(0))
-        taskrow.addWidget(menu)
-        for text, index in (("Pliki", 1), ("Terminal", 2), ("Gaming", 3)):
-            button = QPushButton(text)
-            button.clicked.connect(lambda checked=False, i=index: self._select_page(i))
-            taskrow.addWidget(button)
-        taskrow.addStretch()
-        self.clock_label = QLabel("")
-        taskrow.addWidget(self.clock_label)
-        main.addWidget(taskbar)
-        self.setCentralWidget(central)
+        content = QHBoxLayout()
+        content.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+        shortcuts = QVBoxLayout()
+        shortcuts.setSpacing(12)
+        for emoji, title, action in (
+            ("🖥️", "Ten komputer", self.show_system_info),
+            ("📁", "Eksplorator", self.open_explorer),
+            ("🌐", "Przeglądarka", self.open_browser),
+            ("🎮", "Gaming Hub", self.open_gaming),
+            ("⚙️", "Ustawienia", self.open_settings),
+        ):
+            button = QPushButton(f"{emoji}\n{title}")
+            button.setObjectName("desktopIcon")
+            button.setFixedSize(112, 82)
+            button.clicked.connect(action)
+            shortcuts.addWidget(button)
+        shortcuts.addStretch()
+        content.addLayout(shortcuts)
 
-    def _page_header(self, title, description):
-        header = QVBoxLayout()
-        heading = QLabel(title)
-        heading.setObjectName("heading")
-        detail = QLabel(description)
-        detail.setObjectName("muted")
-        detail.setWordWrap(True)
-        header.addWidget(heading)
-        header.addWidget(detail)
-        return header
+        welcome = QFrame(objectName="glass")
+        welcome.setMaximumWidth(560)
+        welcome.setStyleSheet("QFrame#glass { background:rgba(12,18,29,205); border:1px solid rgba(255,255,255,60); border-radius:18px; }")
+        welcome_layout = QVBoxLayout(welcome)
+        welcome_layout.setContentsMargins(26, 22, 26, 22)
+        welcome_layout.setSpacing(10)
+        tag = QLabel("YOUR DESKTOP, YOUR RULES")
+        tag.setStyleSheet("color:#c6ff6a;font-weight:800;letter-spacing:2px;font-size:10px;")
+        welcome_layout.addWidget(tag)
+        welcome_layout.addWidget(QLabel("Witaj w VELTRIX.", styleSheet="font-size:30px;font-weight:700;color:white;"))
+        subtitle = QLabel("Pulpit inspirowany Windows, z gamingowym charakterem. Pliki, aplikacje i terminal masz pod ręką.")
+        subtitle.setWordWrap(True)
+        subtitle.setStyleSheet("color:#d2d9e3;font-size:13px;")
+        welcome_layout.addWidget(subtitle)
+        buttons = QHBoxLayout()
+        for caption, action in (("Otwórz Explorer", self.open_explorer), ("Uruchom Gaming Hub", self.open_gaming)):
+            button = QPushButton(caption)
+            button.setObjectName("primary" if caption.startswith("Otwórz") else "")
+            button.clicked.connect(action)
+            buttons.addWidget(button)
+        welcome_layout.addLayout(buttons)
+        content.addSpacing(20)
+        content.addWidget(welcome, 0, Qt.AlignmentFlag.AlignTop)
+        content.addStretch()
+        canvas_layout.addLayout(content, 1)
 
-    def _home_page(self):
-        page = QWidget()
-        layout = QVBoxLayout(page)
-        layout.setContentsMargins(30, 25, 30, 22)
-        layout.setSpacing(18)
-        layout.addLayout(self._page_header("Dobry wieczór.", "Pulpit VELTRIX — pliki, terminal, gaming i ustawienia."))
-        welcome = QFrame(objectName="card")
-        box = QHBoxLayout(welcome)
-        box.setContentsMargins(22, 18, 22, 18)
-        text = QVBoxLayout()
-        text.addWidget(QLabel("VELTRIX DESKTOP", objectName="muted"))
-        title = QLabel("Witaj na swoim pulpicie.")
-        title.setStyleSheet("font-size:26px;font-weight:700;")
-        text.addWidget(title)
-        text.addWidget(QLabel("Lekki desktop działający na istniejącym Windows lub Linux.", objectName="muted"))
-        box.addLayout(text, 1)
-        start = QPushButton("Otwórz Gaming Hub  →")
+        taskbar = QFrame(objectName="taskbar")
+        taskbar.setFixedHeight(62)
+        taskbar.setStyleSheet("QFrame#taskbar { background:rgba(18,24,34,238); border:1px solid rgba(255,255,255,45); border-radius:18px; }")
+        task = QHBoxLayout(taskbar)
+        task.setContentsMargins(12, 8, 14, 8)
+        start = QPushButton("⊞")
+        start.setToolTip("Start / aplikacje")
         start.setObjectName("primary")
-        start.clicked.connect(self._launch_gaming_hub)
-        box.addWidget(start)
-        layout.addWidget(welcome)
+        start.setFixedSize(44, 42)
+        start.clicked.connect(self.show_start_menu)
+        task.addWidget(start)
+        self.search = QLineEdit()
+        self.search.setPlaceholderText("Szukaj aplikacji lub wpisz nazwę…")
+        self.search.setFixedWidth(280)
+        self.search.returnPressed.connect(self.search_action)
+        task.addWidget(self.search)
+        for label, action in (("📁", self.open_explorer), (">_", self.open_terminal), ("🎮", self.open_gaming), ("⚙", self.open_settings)):
+            button = QPushButton(label)
+            button.setToolTip({"📁":"Eksplorator plików",">_":"Terminal","🎮":"Gaming Hub","⚙":"Ustawienia"}[label])
+            button.setFixedSize(44, 42)
+            button.clicked.connect(action)
+            task.addWidget(button)
+        task.addStretch()
+        self.status_label = QLabel("●  Gotowy")
+        self.status_label.setStyleSheet("color:#dce7f1;")
+        task.addWidget(self.status_label)
+        self.clock_label = QLabel("")
+        self.clock_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.clock_label.setStyleSheet("font-weight:700;color:white;padding-left:12px;")
+        task.addWidget(self.clock_label)
+        layout.addWidget(self.canvas, 1)
+        layout.addWidget(task, 0, Qt.AlignmentFlag.AlignHCenter)
+        layout.setContentsMargins(0, 0, 0, 12)
+        self.setCentralWidget(root)
 
-        cards = QGridLayout()
-        cards.setSpacing(12)
-        self.cpu_card = SystemCard("Procesor", "—", "Bieżące użycie")
-        self.memory_card = SystemCard("Pamięć RAM", "—", "Bieżące użycie")
-        self.platform_card = SystemCard("System hosta", platform.system(), platform.release())
-        for i, card in enumerate((self.cpu_card, self.memory_card, self.platform_card)):
-            cards.addWidget(card, 0, i)
-        layout.addLayout(cards)
+    def show_start_menu(self):
+        menu = QMenu(self)
+        menu.setMinimumWidth(280)
+        title = QAction("VELTRIX  •  Aplikacje", menu)
+        title.setEnabled(False)
+        menu.addAction(title)
+        menu.addSeparator()
+        for label, action in (("📁   Eksplorator plików", self.open_explorer),
+                              (">_   Terminal", self.open_terminal),
+                              ("🎮   Gaming Hub", self.open_gaming),
+                              ("⚙   Ustawienia", self.open_settings),
+                              ("🖥️   Informacje o systemie", self.show_system_info)):
+            item = menu.addAction(label)
+            item.triggered.connect(action)
+        menu.addSeparator()
+        quit_action = menu.addAction("Zamknij VELTRIX")
+        quit_action.triggered.connect(self.close)
+        menu.exec(self.sender().mapToGlobal(self.sender().rect().topLeft()))
 
-        layout.addWidget(QLabel("SZYBKIE URUCHAMIANIE", objectName="muted"))
-        shortcuts = QGridLayout()
-        defs = [("▤  Menedżer plików", 1), (">_  Terminal", 2),
-                ("🎮  Gaming Hub", 3), ("⌂  Pulpit", 0)]
-        for i, (name, page_index) in enumerate(defs):
-            button = QPushButton(name)
-            button.setMinimumHeight(64)
-            button.clicked.connect(lambda checked=False, p=page_index: self._select_page(p))
-            shortcuts.addWidget(button, i // 2, i % 2)
-        layout.addLayout(shortcuts)
-        layout.addStretch()
-        return page
+    def search_action(self):
+        query = self.search.text().strip().casefold()
+        self.search.clear()
+        actions = {
+            "explorer": self.open_explorer, "pliki": self.open_explorer, "folder": self.open_explorer,
+            "terminal": self.open_terminal, "cmd": self.open_terminal,
+            "gaming": self.open_gaming, "gry": self.open_gaming, "steam": self.open_gaming,
+            "ustawienia": self.open_settings, "settings": self.open_settings,
+            "system": self.show_system_info, "komputer": self.show_system_info,
+        }
+        for key, action in actions.items():
+            if key in query:
+                action()
+                return
+        if query.startswith("http://") or query.startswith("https://"):
+            QDesktopServices.openUrl(QUrl(query))
+        elif query:
+            QMessageBox.information(self, "Wyszukiwanie", f"Nie znaleziono aplikacji „{query}”. Spróbuj: pliki, terminal, gaming, ustawienia.")
 
-    def _files_page(self):
-        page = QWidget()
-        layout = QVBoxLayout(page)
-        layout.setContentsMargins(25, 22, 25, 20)
-        layout.addLayout(self._page_header("Menedżer plików", "Przeglądaj i otwieraj pliki, do których ma dostęp bieżący użytkownik."))
-        bar = QHBoxLayout()
-        home = QPushButton("⌂  Dom")
-        home.clicked.connect(lambda: self._navigate_files(str(HOME)))
-        up = QPushButton("↑  W górę")
-        up.clicked.connect(self._parent_folder)
-        self.path_edit = QLineEdit(str(HOME))
-        self.path_edit.returnPressed.connect(lambda: self._navigate_files(self.path_edit.text()))
-        go = QPushButton("Idź")
-        go.clicked.connect(lambda: self._navigate_files(self.path_edit.text()))
-        new_folder = QPushButton("＋ Folder")
-        new_folder.clicked.connect(self._new_folder)
-        open_item = QPushButton("Otwórz")
-        open_item.clicked.connect(self._open_selected_file)
-        for widget in (home, up, self.path_edit, go, new_folder, open_item):
-            bar.addWidget(widget)
-        layout.addLayout(bar)
+    def open_window(self, window_type):
+        window = window_type(self)
+        self.children.append(window)
+        window.destroyed.connect(lambda: self.children.remove(window) if window in self.children else None)
+        window.show()
+        window.raise_()
+        window.activateWindow()
+        return window
 
-        self.fs_model = QFileSystemModel(self)
-        self.fs_model.setFilter(QDir.Filter.AllEntries | QDir.Filter.NoDotAndDotDot | QDir.Filter.Drives)
-        self.fs_model.setRootPath(str(HOME))
-        self.file_tree = QTreeView()
-        self.file_tree.setModel(self.fs_model)
-        self.file_tree.setRootIndex(self.fs_model.index(str(HOME)))
-        self.file_tree.setColumnWidth(0, 450)
-        self.file_tree.doubleClicked.connect(self._tree_double_click)
-        layout.addWidget(self.file_tree, 1)
-        tip = QLabel("Ctrl+L: ścieżka  •  Ctrl+R: odśwież  •  dwuklik otwiera folder lub plik")
-        tip.setObjectName("muted")
-        layout.addWidget(tip)
-        return page
+    def open_explorer(self):
+        self.open_window(FileExplorer)
 
-    def _gaming_page(self):
-        page = QWidget()
-        layout = QVBoxLayout(page)
-        layout.setContentsMargins(30, 25, 30, 20)
-        layout.addLayout(self._page_header("Gaming", "Gaming Hub dla biblioteki, wydajności i narzędzi Linux."))
-        card = QFrame(objectName="card")
-        box = QVBoxLayout(card)
-        box.setContentsMargins(20, 18, 20, 18)
-        box.addWidget(QLabel("Otwórz pełny gamingowy dashboard VELTRIX PLAY."))
-        button = QPushButton("▶  Uruchom Gaming Hub")
-        button.setObjectName("primary")
-        button.clicked.connect(self._launch_gaming_hub)
-        box.addWidget(button)
-        layout.addWidget(card)
-        for text in ("Biblioteka i wykrywanie lokalnego Steam",
-                     "Uruchamianie gier przez Steam lub plik wykonywalny",
-                     "Podgląd CPU i RAM",
-                     "Wykrywanie Steam, GameMode i MangoHud"):
-            layout.addWidget(QLabel("•  " + text, objectName="muted"))
-        layout.addStretch()
-        return page
+    def open_terminal(self):
+        self.open_window(TerminalWindow)
 
-    def _settings_page(self):
-        page = QWidget()
-        layout = QVBoxLayout(page)
-        layout.setContentsMargins(30, 25, 30, 20)
-        layout.addLayout(self._page_header("Ustawienia", "Personalizacja sesji VELTRIX."))
-        card = QFrame(objectName="card")
-        box = QVBoxLayout(card)
-        box.setContentsMargins(20, 18, 20, 18)
-        box.addWidget(QLabel("Wygląd"))
+    def open_gaming(self):
+        try:
+            subprocess.Popen([sys.executable, "-m", "veltrix"], cwd=ROOT)
+        except OSError as error:
+            QMessageBox.critical(self, "Gaming Hub", f"Nie udało się uruchomić Gaming Hub:\n{error}")
+
+    def open_browser(self):
+        QDesktopServices.openUrl(QUrl("https://www.google.com"))
+
+    def open_settings(self):
+        dialog = QMainWindow(self, Qt.WindowType.Window)
+        dialog.setWindowTitle("Ustawienia VELTRIX")
+        dialog.resize(520, 360)
+        center = QWidget()
+        layout = QVBoxLayout(center)
+        layout.setContentsMargins(24, 24, 24, 24)
+        heading = QLabel("Personalizacja")
+        heading.setObjectName("heading")
+        layout.addWidget(heading)
+        box = QFrame(objectName="panel")
+        box_layout = QVBoxLayout(box)
+        box_layout.setContentsMargins(18, 18, 18, 18)
+        box_layout.addWidget(QLabel("Motyw interfejsu"))
         theme = QCheckBox("Jasny motyw")
-        theme.stateChanged.connect(self._toggle_theme)
-        box.addWidget(theme)
-        box.addWidget(QLabel("VELTRIX działa jako aplikacja użytkownika i nie zmienia sterowników, partycji ani ekranu logowania.", objectName="muted"))
-        layout.addWidget(card)
+        theme.setChecked(self.light_theme)
+        theme.toggled.connect(self.set_theme)
+        box_layout.addWidget(theme)
+        box_layout.addWidget(QLabel("VELTRIX to aplikacja działająca na Twoim systemie. Ustawienia systemowe i uprawnienia pozostają pod kontrolą Windows/Linux."))
+        layout.addWidget(box)
         layout.addStretch()
-        return page
+        close_button = QPushButton("Gotowe")
+        close_button.clicked.connect(dialog.close)
+        layout.addWidget(close_button, 0, Qt.AlignmentFlag.AlignRight)
+        dialog.setCentralWidget(center)
+        self.children.append(dialog)
+        dialog.destroyed.connect(lambda: self.children.remove(dialog) if dialog in self.children else None)
+        dialog.show()
 
-    def _select_page(self, index):
-        self.stack.setCurrentIndex(index)
-        for i, button in enumerate(self.nav_buttons):
-            button.setStyleSheet("color:#a6ff00;" if i == index else "")
+    def set_theme(self, light):
+        self.light_theme = bool(light)
+        self.setStyleSheet(LIGHT_STYLE if self.light_theme else DARK_STYLE)
+        self.canvas.update()
 
-    def _toggle_theme(self, state):
-        self.setStyleSheet(LIGHT_STYLE if state else DARK_STYLE)
-
-    def _refresh_metrics(self):
+    def show_system_info(self):
+        ram = "Brak danych"
         if psutil is not None:
-            self.cpu_card.value.setText(f"{psutil.cpu_percent():.0f}%")
-            ram = psutil.virtual_memory()
-            self.memory_card.value.setText(f"{ram.percent:.0f}%")
-            self.memory_card.detail.setText(f"{ram.used / 1024**3:.1f} / {ram.total / 1024**3:.1f} GB")
+            vm = psutil.virtual_memory()
+            ram = f"{vm.total / (1024 ** 3):.1f} GB"
+        QMessageBox.information(self, "Ten komputer", f"VELTRIX Desktop\n\nSystem: {platform.platform()}\nPython: {platform.python_version()}\nPamięć RAM: {ram}\n\nVELTRIX nie jest systemem operacyjnym i nie zmienia systemu hosta.")
 
-    def _update_clock(self):
-        self.clock_label.setText(datetime.now().strftime("%a  %d %b  •  %H:%M"))
+    def update_clock(self):
+        self.clock_label.setText(datetime.now().strftime("%H:%M   •   %d.%m.%Y"))
 
-    def _navigate_files(self, raw_path):
-        path = Path(raw_path).expanduser()
-        if not path.exists() or not path.is_dir():
-            QMessageBox.warning(self, "Nie można otworzyć folderu", f"Folder nie istnieje lub nie jest dostępny:\n{path}")
-            return
-        resolved = str(path.resolve())
-        self.path_edit.setText(resolved)
-        self.file_tree.setRootIndex(self.fs_model.index(resolved))
-
-    def _parent_folder(self):
-        self._navigate_files(str(Path(self.path_edit.text()).parent))
-
-    def _refresh_files(self):
-        self._navigate_files(self.path_edit.text())
-
-    def _focus_path(self):
-        if self.stack.currentIndex() == 1:
-            self.path_edit.setFocus()
-            self.path_edit.selectAll()
-
-    def _tree_double_click(self, index):
-        path = Path(self.fs_model.filePath(index))
-        if path.is_dir():
-            self._navigate_files(str(path))
+    def update_status(self):
+        if psutil is None:
+            self.status_label.setText("●  VELTRIX ready")
         else:
-            QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
-
-    def _open_selected_file(self):
-        index = self.file_tree.currentIndex()
-        if index.isValid():
-            self._tree_double_click(index)
-
-    def _new_folder(self):
-        name, ok = QInputDialog.getText(self, "Nowy folder", "Nazwa folderu:")
-        if not ok or not name.strip():
-            return
-        target = Path(self.path_edit.text()) / name.strip()
-        try:
-            target.mkdir()
-            self._refresh_files()
-        except OSError as error:
-            QMessageBox.critical(self, "Nie można utworzyć folderu", str(error))
-
-    def _launch_gaming_hub(self):
-        try:
-            subprocess.Popen([sys.executable, "-m", "veltrix"], cwd=Path(__file__).resolve().parents[2])
-        except OSError as error:
-            QMessageBox.critical(self, "Nie można uruchomić Gaming Hub", str(error))
+            self.status_label.setText(f"●  CPU {psutil.cpu_percent():.0f}%  •  RAM {psutil.virtual_memory().percent:.0f}%")
 
 
 def main():
     app = QApplication(sys.argv)
     app.setApplicationName("VELTRIX Desktop")
+    app.setStyle("Fusion")
     window = VeltrixDesktop()
     window.showMaximized()
     return app.exec()
@@ -433,6 +558,9 @@ if __name__ == "__main__":
     try:
         raise SystemExit(main())
     except Exception:
-        log = Path.home() / "veltrix-desktop-startup.log"
-        log.write_text(traceback.format_exc(), encoding="utf-8")
+        log = HOME / "veltrix-desktop-startup.log"
+        try:
+            log.write_text(traceback.format_exc(), encoding="utf-8")
+        except OSError:
+            pass
         raise
