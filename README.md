@@ -1,25 +1,19 @@
 # VELTRIX Desktop
 
-VELTRIX is a polished, Windows-inspired desktop application for Windows and Linux. It runs as a normal user-space app on the host OS; it is not a replacement for Windows, Linux, their kernel, drivers, login manager, or system settings.
+Windows-inspired desktop application for Windows and Linux. It runs as a normal user-space app on the host OS; it is not an operating-system replacement.
 
-## Windows
+## Start
 
-1. Install Python 3.10+ and enable **Add python.exe to PATH**.
-2. Extract the repository ZIP.
-3. Double-click `launcher.bat` and click **START**. On first run it creates `.venv` and installs dependencies.
+**Windows:** install Python 3.10+, enable **Add python.exe to PATH**, extract the ZIP, run `launcher.bat`, then click **START**. On first run the launcher creates `.venv` and installs dependencies. PyQt WebEngine is included for the built-in browser.
 
-## Linux
+**Linux:** `chmod +x run.sh && ./run.sh`
 
-```bash
-chmod +x run.sh
-./run.sh
-```
+## Apps and desktop tools
 
-## Desktop features
+- Desktop wallpaper, shortcuts, Start menu, search box, taskbar, clock, CPU/RAM status, and light/dark theme.
+- Built-in Chromium browser window powered by Qt WebEngine: multiple tabs, address/search bar, back/forward, reload, home, and shortcuts (`Ctrl+L`, `Ctrl+T`, `Ctrl+W`).
+- File Explorer with folder navigation, visible-file filtering, details, open-with-host-app, create folder/file, `Alt+Up`, `Ctrl+L`, and `F5`.
+- Terminal with `/help` built-ins: `/clear`, `/pwd`, `/ls`, `/cd`, `/open`, `/explorer`, `/browser`, `/date`, `/time`, `/whoami`, `/system`, `/cpu`, `/ram`, `/disk`, `/ip`, `/find`, `/mkdir`, `/touch`, `/theme`, and `/apps`. Other commands run in the host shell as the current user; enter only commands you understand.
+- Gaming Hub launch, host system information, and quick app search.
 
-- Custom gradient wallpaper, desktop shortcuts, Start/app menu, taskbar, clock and live CPU/RAM status.
-- Explorer window: browse folders, search the current directory, open files in host apps, create folders, and navigate with keyboard shortcuts.
-- Terminal window runs commands with the current user's permissions.
-- Gaming Hub, browser shortcut, system information, and dark/light appearance settings.
-
-VELTRIX intentionally uses the host OS for real system services and permissions. It does not imitate or replace the Windows/Linux kernel or silently modify system settings.
+VELTRIX uses the host OS for permissions, network, drivers, and services. It does not silently change system settings or elevate privileges.
