@@ -2,18 +2,25 @@
 
 Rozszerzalny desktop w Pythonie/PyQt6. To aplikacja uruchamiana na Linuksie lub Windowsie, nie osobny kernel.
 
-## Windows (uruchamianie kliknięciem)
+## Windows: łatwa komenda `veltrix`
 
-Zainstaluj Python 3.10+ z https://www.python.org/downloads/ i zaznacz **Add Python to PATH**. Następnie kliknij dwukrotnie `run.bat`. Skrypt tworzy środowisko `.venv`, instaluje wymagania i uruchamia pulpit. Okno konsoli pozostaje otwarte po zamknięciu lub błędzie, więc komunikat nie znika.
+1. Zainstaluj Python 3.10+ z https://www.python.org/downloads/ i zaznacz **Add Python to PATH**.
+2. W katalogu repozytorium kliknij dwukrotnie `install-command.bat`. Skrypt utworzy komendę i doda ją do PATH użytkownika.
+3. Zamknij i otwórz ponownie CMD.
+4. Wpisz:
 
-Możesz też uruchomić w terminalu:
+```bat
+veltrix
+```
+
+Aby zainstalować/zaktualizować środowisko projektu, najpierw uruchom w katalogu repozytorium:
 
 ```bat
 py -3 -m venv .venv
-.venv\Scripts\activate
-python -m pip install -r requirements.txt
-python -m veltrix
+.venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
+
+Możesz też użyć `run.bat` do instalacji zależności i uruchomienia bez konfigurowania komendy.
 
 ## Linux
 
@@ -24,4 +31,4 @@ chmod +x run.sh
 
 ## Diagnostyka
 
-Jeśli aplikacja nadal się zamyka, uruchom `run.bat` z CMD/PowerShell i skopiuj pełny komunikat błędu. Ślad startowy zapisywany jest w `~/.local/state/veltrix-os/startup.log` (na Windows w katalogu domowym użytkownika).
+Uruchom `veltrix` w CMD, aby zobaczyć błędy. Log startowy znajduje się w `~/.local/state/veltrix-os/startup.log`.
