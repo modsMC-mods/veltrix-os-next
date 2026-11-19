@@ -1,18 +1,5 @@
-from .calendar import Calendar
-from .calculator import Calculator
-from .diagnostics import Diagnostics
-from .processes import Processes
-from .control_center import ControlCenter
-from .login import Login
-from .search import Search
-from .screenshots import Screenshots
-from .recorder import Recorder
-from .media import MediaPlayer
-from .images import ImageViewer
-from .packages import PackageManager
-from .updater import Updater
-from .wizard import FirstRunWizard
-from .network import Network
-from .bluetooth import Bluetooth
-from .audio import Audio
-from .bugreport import BugReport
+"""VELTRIX application package.
+
+Keep this file free of eager imports: optional app modules must not prevent the
+main desktop from starting when one app has an unavailable dependency.
+"""
