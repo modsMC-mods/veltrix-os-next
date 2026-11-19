@@ -1,36 +1,23 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-echo Starting VELTRIX OS Next...
+echo Starting VELTRIX Desktop...
 where py >nul 2>nul
 if errorlevel 1 (
-  where python >nul 2>nul
-  if errorlevel 1 goto no_python
-  set PY=python
-) else (
-  set PY=py -3
+  echo Python 3 was not found. Install Python and enable Add Python to PATH.
+  pause
+  exit /b 1
 )
 if not exist .venv\Scripts\python.exe (
-  echo Creating virtual environment...
-  %PY% -m venv .venv
+  py -3 -m venv .venv
   if errorlevel 1 goto failed
 )
-call .venv\Scripts\activate.bat
-echo Installing/checking dependencies...
-python -m pip install --disable-pip-version-check -r requirements.txt
+.venv\Scripts\python.exe -m pip install --disable-pip-version-check -r requirements.txt
 if errorlevel 1 goto failed
-echo Launching desktop...
-python -m veltrix
+.venv\Scripts\python.exe -m veltrix.apps.desktop
 if errorlevel 1 goto failed
-echo VELTRIX exited normally.
-pause
 exit /b 0
-:no_python
-echo Python 3 was not found. Install Python 3.10+ from https://www.python.org/downloads/ and enable Add Python to PATH.
-goto pause_error
 :failed
-echo.
-echo VELTRIX failed to start. Read the error above. A startup log may be at %%USERPROFILE%%\.local\state\veltrix-os\startup.log
-:pause_error
+echo VELTRIX could not start. Check the error above.
 pause
 exit /b 1
