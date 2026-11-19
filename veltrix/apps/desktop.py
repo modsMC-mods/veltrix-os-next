@@ -3,6 +3,7 @@ import os
 import platform
 import subprocess
 import sys
+import traceback
 from datetime import datetime
 from pathlib import Path
 
@@ -11,8 +12,15 @@ from PyQt6.QtGui import QDesktopServices, QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
     QApplication, QCheckBox, QFrame, QGridLayout, QHBoxLayout, QInputDialog,
     QLabel, QLineEdit, QMainWindow, QMessageBox, QPlainTextEdit, QPushButton,
-    QStackedWidget, QTreeView, QVBoxLayout, QWidget, QFileSystemModel,
+    QStackedWidget, QTreeView, QVBoxLayout, QWidget,
 )
+
+# QFileSystemModel belongs to QtWidgets in PyQt6 builds. Import QtGui as a
+# compatibility fallback for differently packaged PyQt6 installations.
+try:
+    from PyQt6.QtWidgets import QFileSystemModel
+except ImportError:
+    from PyQt6.QtGui import QFileSystemModel
 
 try:
     import psutil
@@ -55,12 +63,13 @@ class SystemCard(QFrame):
         self.setObjectName("card")
         box = QVBoxLayout(self)
         box.setContentsMargins(17, 15, 17, 15)
-        box.addWidget(QLabel(title.upper(), objectName="muted")
-                      if False else QLabel(title.upper()))
+        title_label = QLabel(title.upper())
+        title_label.setObjectName("muted")
         self.value = QLabel(value)
         self.value.setStyleSheet("font-size:23px;font-weight:700;")
         self.detail = QLabel(detail)
         self.detail.setObjectName("muted")
+        box.addWidget(title_label)
         box.addWidget(self.value)
         box.addWidget(self.detail)
 
@@ -125,7 +134,7 @@ class TerminalPage(QWidget):
     def _read_output(self, process):
         data = bytes(process.readAllStandardOutput()).decode(errors="replace")
         if data:
-            self.console.moveCursor(self.console.textCursor().End)
+            self.console.moveCursor(self.console.textCursor().MoveOperation.End)
             self.console.insertPlainText(data)
             self.console.ensureCursorVisible()
 
@@ -184,7 +193,7 @@ class VeltrixDesktop(QMainWindow):
         side.addWidget(brand)
         side.addWidget(QLabel("DESKTOP • PLAY • CREATE", objectName="muted"))
         side.addSpacing(24)
-        icons = ["⌂", "▤", "&gt;_", "🎮", "⚙"]
+        icons = ["⌂", "▤", ">_", "🎮", "⚙"]
         for i, name in enumerate(self.PAGES):
             button = QPushButton(f"{icons[i]}   {name}")
             button.setObjectName("nav")
@@ -258,7 +267,7 @@ class VeltrixDesktop(QMainWindow):
 
         layout.addWidget(QLabel("SZYBKIE URUCHAMIANIE", objectName="muted"))
         shortcuts = QGridLayout()
-        defs = [("▤  Menedżer plików", 1), ("&_  Terminal".replace("&", ">"), 2),
+        defs = [("▤  Menedżer plików", 1), (">_  Terminal", 2),
                 ("🎮  Gaming Hub", 3), ("⌂  Pulpit", 0)]
         for i, (name, page_index) in enumerate(defs):
             button = QPushButton(name)
@@ -421,4 +430,9 @@ def main():
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except Exception:
+        log = Path.home() / "veltrix-desktop-startup.log"
+        log.write_text(traceback.format_exc(), encoding="utf-8")
+        raise
