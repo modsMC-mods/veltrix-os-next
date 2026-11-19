@@ -1,24 +1,19 @@
-# VELTRIX OS Next
+# VELTRIX PLAY
 
-Rozszerzalny desktop w Pythonie/PyQt6. To aplikacja uruchamiana na Linuksie lub Windowsie, nie osobny kernel.
+VELTRIX PLAY is an Ubuntu-inspired gaming dashboard for an existing Windows or Linux computer (it is not a Linux distribution or kernel).
 
-## Windows: launcher ze przyciskiem START
+## Windows setup
 
-1. Zainstaluj Python 3.10+ z https://www.python.org/downloads/ i zaznacz **Add python.exe to PATH**.
-2. Dwukrotnie kliknij `launcher.bat`.
-3. Kliknij **START**. Launcher sam utworzy `.venv`, doinstaluje pakiety z `requirements.txt` i uruchomi pulpit. Pierwsze uruchomienie może potrwać.
+1. Install Python 3.10+ and select **Add python.exe to PATH**.
+2. Extract the ZIP, then double-click `launcher.bat`.
+3. Click **START**. The launcher creates its virtual environment, installs requirements and opens the gaming dashboard. First start needs an internet connection to install dependencies.
 
-Jeśli wystąpi błąd, launcher pokaże komunikat. Szczegóły zapisuje do `veltrix-launcher.log` w katalogu projektu. Zachowuje okno launchera, żeby można było ponowić próbę.
+## Gaming features
 
-Możesz również uruchomić z CMD:
+- Dark neon dashboard with overview, game library, live performance page and gaming setup checks.
+- Add a local game executable; the library is saved in `~/.veltrix/games.json`.
+- Scan local Steam libraries for installed game manifests and launch them through Steam.
+- Display CPU and memory utilization locally using psutil.
+- On Linux, detect Steam, GameMode and MangoHud when their commands are available. Checks are informational; VELTRIX does not make privileged or silent system changes.
 
-```bat
-py launcher.py
-```
-
-## Linux
-
-```bash
-chmod+x run.sh
-./run.sh
-```
+The Linux launcher is `./run.sh` (make executable with `chmod +x run.sh`). Steam, GameMode, MangoHud and hardware support are separate system components and may need to be installed using your distribution's trusted package sources.
