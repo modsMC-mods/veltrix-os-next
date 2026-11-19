@@ -1,8 +1,4 @@
-"""VELTRIX desktop shell with local file manager, terminal, and gaming hub launcher.
-
-This is a user-space application running on top of Windows/Linux, not an operating
-system replacement. The terminal runs commands with the current user's permissions.
-"""
+"""VELTRIX desktop shell: file manager, terminal, settings, and gaming launch point."""
 import os
 import platform
 import subprocess
@@ -10,12 +6,12 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from PyQt6.QtCore import QDir, QProcess, QTimer, Qt
+from PyQt6.QtCore import QDir, QProcess, QTimer, Qt, QUrl
 from PyQt6.QtGui import QDesktopServices, QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
-    QApplication, QCheckBox, QFileDialog, QFileSystemModel, QFrame, QGridLayout,
-    QHBoxLayout, QInputDialog, QLabel, QLineEdit, QMainWindow, QMessageBox,
-    QPushButton, QStackedWidget, QTreeView, QVBoxLayout, QWidget,
+    QApplication, QCheckBox, QFrame, QGridLayout, QHBoxLayout, QInputDialog,
+    QLabel, QLineEdit, QMainWindow, QMessageBox, QPlainTextEdit, QPushButton,
+    QStackedWidget, QTreeView, QVBoxLayout, QWidget, QFileSystemModel,
 )
 
 try:
@@ -25,20 +21,18 @@ except ImportError:
 
 HOME = Path.home()
 ACCENT = "#a6ff00"
-DARK_STYLE = f"""
-QMainWindow, QWidget {{ background:#101319; color:#f0f3f6; font-family:'Segoe UI',sans-serif; }}
-QFrame#sidebar {{ background:#171b22; border-right:1px solid #2a3039; }}
-QFrame#card {{ background:#1b2029; border:1px solid #303743; border-radius:12px; }}
-QLabel#brand {{ font-size:22px; font-weight:900; }}
-QLabel#heading {{ font-size:28px; font-weight:700; }}
-QLabel#muted {{ color:#a0a9b5; }}
-QPushButton {{ background:#222833; color:#f0f3f6; border:1px solid #343c49; border-radius:8px; padding:9px 13px; text-align:left; }}
-QPushButton:hover {{ border-color:{ACCENT}; color:{ACCENT}; }}
-QPushButton#primary {{ background:{ACCENT}; color:#11150b; border:0; font-weight:800; }}
-QPushButton#nav {{ background:transparent; border:0; padding:12px; color:#c2c8d0; }}
-QPushButton#nav:hover {{ background:#252c35; color:{ACCENT}; }}
-QLineEdit, QTreeView {{ background:#171b22; color:#f0f3f6; border:1px solid #343c49; border-radius:7px; padding:8px; selection-background-color:#42562b; }}
-QCheckBox {{ spacing:8px; }}
+DARK_STYLE = """
+QMainWindow, QWidget { background:#101319; color:#f0f3f6; font-family:'Segoe UI',sans-serif; }
+QFrame#sidebar { background:#171b22; border-right:1px solid #2a3039; }
+QFrame#card { background:#1b2029; border:1px solid #303743; border-radius:12px; }
+QLabel#brand { font-size:22px; font-weight:900; }
+QLabel#heading { font-size:28px; font-weight:700; }
+QLabel#muted { color:#a0a9b5; }
+QPushButton { background:#222833; color:#f0f3f6; border:1px solid #343c49; border-radius:8px; padding:9px 13px; }
+QPushButton:hover { border-color:#a6ff00; color:#a6ff00; }
+QPushButton#primary { background:#a6ff00; color:#11150b; border:0; font-weight:800; }
+QPushButton#nav { background:transparent; border:0; padding:12px; color:#c2c8d0; text-align:left; }
+QLineEdit, QTreeView, QPlainTextEdit { background:#171b22; color:#f0f3f6; border:1px solid #343c49; border-radius:7px; padding:8px; }
 """
 LIGHT_STYLE = """
 QMainWindow, QWidget { background:#f3f5f7; color:#20242a; font-family:'Segoe UI',sans-serif; }
@@ -47,12 +41,11 @@ QFrame#card { background:white; border:1px solid #d8dde3; border-radius:12px; }
 QLabel#brand { font-size:22px; font-weight:900; }
 QLabel#heading { font-size:28px; font-weight:700; }
 QLabel#muted { color:#606b78; }
-QPushButton { background:#fff; color:#20242a; border:1px solid #cbd1d8; border-radius:8px; padding:9px 13px; text-align:left; }
+QPushButton { background:white; color:#20242a; border:1px solid #cbd1d8; border-radius:8px; padding:9px 13px; }
 QPushButton:hover { border-color:#6b8e23; color:#496719; }
 QPushButton#primary { background:#7cad26; color:white; border:0; font-weight:800; }
-QPushButton#nav { background:transparent; border:0; padding:12px; color:#404954; }
-QPushButton#nav:hover { background:#d8e2ca; color:#35550b; }
-QLineEdit, QTreeView { background:white; color:#20242a; border:1px solid #cbd1d8; border-radius:7px; padding:8px; selection-background-color:#cfe2ad; }
+QPushButton#nav { background:transparent; border:0; padding:12px; color:#404954; text-align:left; }
+QLineEdit, QTreeView, QPlainTextEdit { background:white; color:#20242a; border:1px solid #cbd1d8; border-radius:7px; padding:8px; }
 """
 
 
@@ -62,13 +55,12 @@ class SystemCard(QFrame):
         self.setObjectName("card")
         box = QVBoxLayout(self)
         box.setContentsMargins(17, 15, 17, 15)
-        title_label = QLabel(title.upper())
-        title_label.setObjectName("muted")
+        box.addWidget(QLabel(title.upper(), objectName="muted")
+                      if False else QLabel(title.upper()))
         self.value = QLabel(value)
         self.value.setStyleSheet("font-size:23px;font-weight:700;")
         self.detail = QLabel(detail)
         self.detail.setObjectName("muted")
-        box.addWidget(title_label)
         box.addWidget(self.value)
         box.addWidget(self.detail)
 
@@ -78,10 +70,6 @@ class TerminalPage(QWidget):
         super().__init__()
         self.cwd = HOME
         self.process = None
-        self.output = QLineEdit()
-        self.output.setReadOnly(True)
-        # QPlainTextEdit is used for scrollable terminal output.
-        from PyQt6.QtWidgets import QPlainTextEdit
         self.console = QPlainTextEdit()
         self.console.setReadOnly(True)
         self.console.setStyleSheet("font-family:Consolas,monospace;font-size:13px;padding:12px;")
@@ -105,9 +93,8 @@ class TerminalPage(QWidget):
             self.console.clear()
             return
         if text.lower() in ("exit", "quit"):
-            self.console.appendPlainText("Terminal pozostaje otwarty. Zamknij jego kartę, aby wyjść.")
+            self.console.appendPlainText("Terminal nadal działa. Wpisz polecenie lub zamknij VELTRIX.")
             return
-        # Handle directory changes in this UI so subsequent commands use the new cwd.
         if text.lower() == "cd" or text.lower().startswith("cd "):
             target = text[2:].strip().strip('"') or str(HOME)
             path = Path(target).expanduser()
@@ -119,6 +106,7 @@ class TerminalPage(QWidget):
             else:
                 self.console.appendPlainText(f"Folder nie istnieje: {path}")
             return
+
         process = QProcess(self)
         process.setWorkingDirectory(str(self.cwd))
         process.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
@@ -133,15 +121,11 @@ class TerminalPage(QWidget):
         self.process = process
         self.command.setEnabled(False)
         process.start()
-        if not process.waitForStarted(1500):
-            self.console.appendPlainText("Nie udało się uruchomić powłoki.")
-            self.process = None
-            self.command.setEnabled(True)
 
     def _read_output(self, process):
         data = bytes(process.readAllStandardOutput()).decode(errors="replace")
         if data:
-            self.console.moveCursor(self.console.textCursor().MoveOperation.End)
+            self.console.moveCursor(self.console.textCursor().End)
             self.console.insertPlainText(data)
             self.console.ensureCursorVisible()
 
@@ -150,7 +134,6 @@ class TerminalPage(QWidget):
         self.console.appendPlainText(f"[zakończono: {code}]")
         self.process = None
         self.command.setEnabled(True)
-        process.deleteLater()
         self.command.setFocus()
 
 
@@ -190,6 +173,7 @@ class VeltrixDesktop(QMainWindow):
         main.setSpacing(0)
         body = QHBoxLayout()
         body.setSpacing(0)
+
         self.sidebar = QFrame(objectName="sidebar")
         self.sidebar.setFixedWidth(220)
         side = QVBoxLayout(self.sidebar)
@@ -198,12 +182,11 @@ class VeltrixDesktop(QMainWindow):
         brand.setTextFormat(Qt.TextFormat.RichText)
         brand.setObjectName("brand")
         side.addWidget(brand)
-        sub = QLabel("DESKTOP • PLAY • CREATE")
-        sub.setObjectName("muted")
-        side.addWidget(sub)
+        side.addWidget(QLabel("DESKTOP • PLAY • CREATE", objectName="muted"))
         side.addSpacing(24)
+        icons = ["⌂", "▤", "&gt;_", "🎮", "⚙"]
         for i, name in enumerate(self.PAGES):
-            button = QPushButton(["⌂   ", "▤   ", ">_   ", "🎮  ", "⚙   "][i] + name)
+            button = QPushButton(f"{icons[i]}   {name}")
             button.setObjectName("nav")
             button.clicked.connect(lambda checked=False, index=i: self._select_page(index))
             side.addWidget(button)
@@ -221,10 +204,10 @@ class VeltrixDesktop(QMainWindow):
         menu = QPushButton("◉  VELTRIX")
         menu.clicked.connect(lambda: self._select_page(0))
         taskrow.addWidget(menu)
-        for text, index in (("Files", 1), ("Terminal", 2), ("Gaming", 3)):
-            btn = QPushButton(text)
-            btn.clicked.connect(lambda checked=False, i=index: self._select_page(i))
-            taskrow.addWidget(btn)
+        for text, index in (("Pliki", 1), ("Terminal", 2), ("Gaming", 3)):
+            button = QPushButton(text)
+            button.clicked.connect(lambda checked=False, i=index: self._select_page(i))
+            taskrow.addWidget(button)
         taskrow.addStretch()
         self.clock_label = QLabel("")
         taskrow.addWidget(self.clock_label)
@@ -247,26 +230,23 @@ class VeltrixDesktop(QMainWindow):
         layout = QVBoxLayout(page)
         layout.setContentsMargins(30, 25, 30, 22)
         layout.setSpacing(18)
-        layout.addLayout(self._page_header("Dobry wieczór, gracz.", "Twój pulpit VELTRIX — pliki, terminal, aplikacje i gaming w jednym miejscu."))
+        layout.addLayout(self._page_header("Dobry wieczór.", "Pulpit VELTRIX — pliki, terminal, gaming i ustawienia."))
         welcome = QFrame(objectName="card")
         box = QHBoxLayout(welcome)
         box.setContentsMargins(22, 18, 22, 18)
         text = QVBoxLayout()
-        label = QLabel("VELTRIX DESKTOP")
-        label.setStyleSheet("color:#a6ff00;font-weight:800;letter-spacing:2px;")
-        text.addWidget(label)
+        text.addWidget(QLabel("VELTRIX DESKTOP", objectName="muted"))
         title = QLabel("Witaj na swoim pulpicie.")
         title.setStyleSheet("font-size:26px;font-weight:700;")
         text.addWidget(title)
-        desc = QLabel("Lekki desktop działający na Windows lub Linux. Nie zastępuje systemu operacyjnego.")
-        desc.setObjectName("muted")
-        text.addWidget(desc)
+        text.addWidget(QLabel("Lekki desktop działający na istniejącym Windows lub Linux.", objectName="muted"))
         box.addLayout(text, 1)
         start = QPushButton("Otwórz Gaming Hub  →")
         start.setObjectName("primary")
         start.clicked.connect(self._launch_gaming_hub)
         box.addWidget(start)
         layout.addWidget(welcome)
+
         cards = QGridLayout()
         cards.setSpacing(12)
         self.cpu_card = SystemCard("Procesor", "—", "Bieżące użycie")
@@ -275,16 +255,15 @@ class VeltrixDesktop(QMainWindow):
         for i, card in enumerate((self.cpu_card, self.memory_card, self.platform_card)):
             cards.addWidget(card, 0, i)
         layout.addLayout(cards)
-        layout.addWidget(QLabel("SZYBKIE URUCHAMIANIE"))
+
+        layout.addWidget(QLabel("SZYBKIE URUCHAMIANIE", objectName="muted"))
         shortcuts = QGridLayout()
-        shortcut_defs = [("▤  Menedżer plików", lambda: self._select_page(1)),
-                         (">_  Terminal", lambda: self._select_page(2)),
-                         ("🎮  Gaming Hub", self._launch_gaming_hub),
-                         ("⌂  Folder domowy", self._open_home)]
-        for i, (name, action) in enumerate(shortcut_defs):
+        defs = [("▤  Menedżer plików", 1), ("&_  Terminal".replace("&", ">"), 2),
+                ("🎮  Gaming Hub", 3), ("⌂  Pulpit", 0)]
+        for i, (name, page_index) in enumerate(defs):
             button = QPushButton(name)
             button.setMinimumHeight(64)
-            button.clicked.connect(action)
+            button.clicked.connect(lambda checked=False, p=page_index: self._select_page(p))
             shortcuts.addWidget(button, i // 2, i % 2)
         layout.addLayout(shortcuts)
         layout.addStretch()
@@ -294,7 +273,7 @@ class VeltrixDesktop(QMainWindow):
         page = QWidget()
         layout = QVBoxLayout(page)
         layout.setContentsMargins(25, 22, 25, 20)
-        layout.addLayout(self._page_header("Menedżer plików", "Przeglądaj pliki swojego konta. System ogranicza dostęp zgodnie z uprawnieniami użytkownika."))
+        layout.addLayout(self._page_header("Menedżer plików", "Przeglądaj i otwieraj pliki, do których ma dostęp bieżący użytkownik."))
         bar = QHBoxLayout()
         home = QPushButton("⌂  Dom")
         home.clicked.connect(lambda: self._navigate_files(str(HOME)))
@@ -311,6 +290,7 @@ class VeltrixDesktop(QMainWindow):
         for widget in (home, up, self.path_edit, go, new_folder, open_item):
             bar.addWidget(widget)
         layout.addLayout(bar)
+
         self.fs_model = QFileSystemModel(self)
         self.fs_model.setFilter(QDir.Filter.AllEntries | QDir.Filter.NoDotAndDotDot | QDir.Filter.Drives)
         self.fs_model.setRootPath(str(HOME))
@@ -320,7 +300,7 @@ class VeltrixDesktop(QMainWindow):
         self.file_tree.setColumnWidth(0, 450)
         self.file_tree.doubleClicked.connect(self._tree_double_click)
         layout.addWidget(self.file_tree, 1)
-        tip = QLabel("Ctrl+L: edytuj ścieżkę   •   Ctrl+R: odśwież   •   dwuklik otwiera folder lub plik")
+        tip = QLabel("Ctrl+L: ścieżka  •  Ctrl+R: odśwież  •  dwuklik otwiera folder lub plik")
         tip.setObjectName("muted")
         layout.addWidget(tip)
         return page
@@ -329,7 +309,7 @@ class VeltrixDesktop(QMainWindow):
         page = QWidget()
         layout = QVBoxLayout(page)
         layout.setContentsMargins(30, 25, 30, 20)
-        layout.addLayout(self._page_header("Gaming", "Biblioteka gier Steam, pomiar wydajności i kontrole narzędzi do grania."))
+        layout.addLayout(self._page_header("Gaming", "Gaming Hub dla biblioteki, wydajności i narzędzi Linux."))
         card = QFrame(objectName="card")
         box = QVBoxLayout(card)
         box.setContentsMargins(20, 18, 20, 18)
@@ -339,14 +319,11 @@ class VeltrixDesktop(QMainWindow):
         button.clicked.connect(self._launch_gaming_hub)
         box.addWidget(button)
         layout.addWidget(card)
-        layout.addWidget(QLabel("Dostępne w Gaming Hub"))
-        for text in ("Biblioteka i lokalne wykrywanie gier Steam",
-                     "Uruchamianie wybranych gier przez Steam lub plik wykonywalny",
-                     "Podgląd użycia CPU i RAM",
-                     "Wykrywanie Steam, GameMode i MangoHud na Linuxie"):
-            label = QLabel("•  " + text)
-            label.setObjectName("muted")
-            layout.addWidget(label)
+        for text in ("Biblioteka i wykrywanie lokalnego Steam",
+                     "Uruchamianie gier przez Steam lub plik wykonywalny",
+                     "Podgląd CPU i RAM",
+                     "Wykrywanie Steam, GameMode i MangoHud"):
+            layout.addWidget(QLabel("•  " + text, objectName="muted"))
         layout.addStretch()
         return page
 
@@ -354,7 +331,7 @@ class VeltrixDesktop(QMainWindow):
         page = QWidget()
         layout = QVBoxLayout(page)
         layout.setContentsMargins(30, 25, 30, 20)
-        layout.addLayout(self._page_header("Ustawienia", "Podstawowa personalizacja sesji VELTRIX."))
+        layout.addLayout(self._page_header("Ustawienia", "Personalizacja sesji VELTRIX."))
         card = QFrame(objectName="card")
         box = QVBoxLayout(card)
         box.setContentsMargins(20, 18, 20, 18)
@@ -362,15 +339,8 @@ class VeltrixDesktop(QMainWindow):
         theme = QCheckBox("Jasny motyw")
         theme.stateChanged.connect(self._toggle_theme)
         box.addWidget(theme)
-        box.addWidget(QLabel("VELTRIX działa jako aplikacja użytkownika. Nie zmienia ekranu logowania, sterowników, partycji ani ustawień systemowych."))
+        box.addWidget(QLabel("VELTRIX działa jako aplikacja użytkownika i nie zmienia sterowników, partycji ani ekranu logowania.", objectName="muted"))
         layout.addWidget(card)
-        about = QFrame(objectName="card")
-        about_layout = QVBoxLayout(about)
-        about_layout.setContentsMargins(20, 18, 20, 18)
-        about_layout.addWidget(QLabel("Informacje"))
-        about_layout.addWidget(QLabel(f"System: {platform.platform()}"))
-        about_layout.addWidget(QLabel(f"Python: {platform.python_version()}"))
-        layout.addWidget(about)
         layout.addStretch()
         return page
 
@@ -402,12 +372,10 @@ class VeltrixDesktop(QMainWindow):
         self.file_tree.setRootIndex(self.fs_model.index(resolved))
 
     def _parent_folder(self):
-        path = Path(self.path_edit.text()).parent
-        self._navigate_files(str(path))
+        self._navigate_files(str(Path(self.path_edit.text()).parent))
 
     def _refresh_files(self):
-        if hasattr(self, "path_edit"):
-            self._navigate_files(self.path_edit.text())
+        self._navigate_files(self.path_edit.text())
 
     def _focus_path(self):
         if self.stack.currentIndex() == 1:
@@ -419,13 +387,12 @@ class VeltrixDesktop(QMainWindow):
         if path.is_dir():
             self._navigate_files(str(path))
         else:
-            QDesktopServices.openUrl(__import__("PyQt6.QtCore", fromlist=["QUrl"]).QUrl.fromLocalFile(str(path)))
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
 
     def _open_selected_file(self):
         index = self.file_tree.currentIndex()
-        if not index.isValid():
-            return
-        self._tree_double_click(index)
+        if index.isValid():
+            self._tree_double_click(index)
 
     def _new_folder(self):
         name, ok = QInputDialog.getText(self, "Nowy folder", "Nazwa folderu:")
@@ -437,9 +404,6 @@ class VeltrixDesktop(QMainWindow):
             self._refresh_files()
         except OSError as error:
             QMessageBox.critical(self, "Nie można utworzyć folderu", str(error))
-
-    def _open_home(self):
-        QDesktopServices.openUrl(__import__("PyQt6.QtCore", fromlist=["QUrl"]).QUrl.fromLocalFile(str(HOME)))
 
     def _launch_gaming_hub(self):
         try:
